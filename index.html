@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Multifunctional Landscape Planner</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Libre+Baskerville:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css"/>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf/turf.min.js"></script>
+  <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
+
+  <style>
+    :root{
+      --ink:#1a1a18;--ink2:#4a4a45;--ink3:#8a8a82;
+      --paper:#f5f3ee;--paper2:#eceae3;--paper3:#e0ddd5;
+      --accent:#2d5a27;--accent2:#4a8c42;
+      --border:rgba(26,26,24,0.12);--radius:4px;
+      --font-ui:'DM Sans',sans-serif;
+      --font-mono:'DM Mono',monospace;
+      --font-serif:'Libre Baskerville',serif;
+    }
+
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:14px}
+    #app{display:grid;grid-template-columns:1fr 380px;grid-template-rows:48px 1fr;height:100vh}
+
+    /* ── Header ─────────────────────────────────────── */
+    #header{
+      grid-column:1/-1;background:var(--ink);color:var(--paper);
+      display:flex;align-items:center;padding:0 20px;gap:16px;
+      border-bottom:1px solid rgba(255,255,255,0.08)
+    }
+    #header h1{
+      font-family:var(--font-serif);
+      font-style:italic;
+      font-size:16px;
+      font-weight:400
+    }
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--accent2)}
+    .coord{
+      font-family:var(--font-mono);
+      font-size:11px;
+      color:rgba(245,243,238,0.4);
+      margin-left:auto
+    }
+    .area-badge{
+      font-family:var(--font-mono);
+      font-size:11px;
+      color:rgba(245,243,238,0.55);
+      background:rgba(255,255,255,0.07);
+      padding:3px 10px;
+      border-radius:2px
+    }
+
+    /* ── Map & sidebar layout ────────────────────────── */
+    #map{background:var(--paper2);border-right:1px solid var(--border)}
+    #sidebar{display:flex;flex-direction:column;background:var(--paper);overflow:hidden}
+
+    /* ── Tabs ───────────────────────────────────────── */
+    #tabs{
+      display:flex;
+      flex-wrap:wrap;
+      border-bottom:1px solid var(--border);
+      flex-shrink:0;
+    }
+    .tab{
+      flex:0 0 20%;
+      max-width:20%;
+      padding:10px 6px;
+      font-size:9.5px;
+      font-family:var(--font-mono);
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+      text-align:center;
+      cursor:pointer;
+      color:var(--ink3);
+      border:none;
+      border-bottom:2px solid transparent;
+      background:none;
+      transition:color .15s,border-color .15s;
+      white-space:normal;
+      line-height:1.25;
+    }
+    .tab:hover{color:var(--ink2)}
+    .tab.active{
+      color:var(--accent);
+      border-bottom-color:var(--accent);
+    }
+
+    /* ── Panels ─────────────────────────────────────── */
+    .panel{
+      display:none;
+      flex-direction:column;
+      flex:1;
+      overflow-y:auto;
+      padding:16px;
+      gap:14px
+    }
+    .panel.active{display:flex}
+    .panel::-webkit-scrollbar{width:4px}
+    .panel::-webkit-scrollbar-thumb{background:var(--paper3);border-radius:2px}
+
+    /* ── Classification source selector ─────────────── */
+    .source-selector-block{
+      background:var(--paper2);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:10px 12px;
+    }
+    .src-btn-row{display:flex;gap:4px;margin:6px 0 4px}
+    .src-btn{
+      flex:1;
+      padding:6px 4px;
+      font-family:var(--font-mono);
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      background:var(--paper);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      color:var(--ink3);
+      cursor:pointer;
+      transition:all .15s;
+      text-align:center;
+      line-height:1.2
+    }
+    .src-btn:hover{color:var(--ink);border-color:var(--ink2)}
+    .src-btn--active{background:var(--accent);color:#fff !important;border-color:var(--accent)}
+    .src-btn__icon{display:block;font-size:13px;margin-bottom:2px}
+
+    /* ── API status bar ─────────────────────────────── */
+    #apiStatus{
+      font-family:var(--font-mono);
+      font-size:10.5px;
+      line-height:1.45;
+      padding:5px 8px;
+      border-radius:var(--radius);
+      margin-top:6px;
+      transition:background .3s
+    }
+    .api-status--info{background:var(--paper3);color:var(--ink3)}
+    .api-status--loading{background:#e8f3ea;color:var(--accent)}
+    .api-status--ready{background:#e8f3ea;color:#1f6b28}
+    .api-status--error{background:#fdecea;color:#b04040}
+
+    /* ── Section labels ─────────────────────────────── */
+    .section-label{
+      font-family:var(--font-mono);
+      font-size:10px;
+      letter-spacing:0.08em;
+      text-transform:uppercase;
+      color:var(--ink3);
+      margin-bottom:8px
+    }
+
+    /* ── Composition bars ───────────────────────────── */
+    .bar-group{display:flex;flex-direction:column;gap:6px}
+    .bar-row{display:flex;align-items:center;gap:8px}
+    .bar-name{width:110px;font-size:12px;color:var(--ink2);flex-shrink:0}
+    .bar-track{flex:1;height:5px;background:var(--paper3);border-radius:3px;overflow:hidden}
+    .bar-fill{height:100%;border-radius:3px;transition:width .5s cubic-bezier(.22,1,.36,1)}
+    .bar-val{
+      font-family:var(--font-mono);
+      font-size:11px;
+      color:var(--ink3);
+      width:40px;
+      text-align:right
+    }
+
+    /* ── Radar chart ────────────────────────────────── */
+    #radarWrap{position:relative;height:230px}
+    .area-stat{
+      font-family:var(--font-mono);
+      font-size:11px;
+      color:var(--ink3);
+      padding:6px 0;
+      border-top:1px solid var(--border)
+    }
+
+    /* ── Metric cards ───────────────────────────────── */
+    .metrics-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+    .metrics-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+
+    .metric-card{
+      background:var(--paper2);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:8px 4px;
+      text-align:center;
+    }
+
+    .metric-label{
+      font-size:9px;
+      font-family:var(--font-mono);
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+      color:var(--ink3);
+      margin-bottom:3px;
+      line-height:1.3
+    }
+
+    .metric-value{
+      font-size:14px;
+      font-weight:400;
+      color:var(--ink);
+      line-height:1.1;
+      margin-bottom:2px
+    }
+
+    .metric-unit{
+      font-size:9px;
+      font-family:var(--font-mono);
+      color:var(--ink3)
+    }
+
+    .metric-detail{
+      margin-top:4px;
+      font-size:10px;
+      font-family:var(--font-mono);
+      color:var(--ink3);
+      line-height:1.35;
+    }
+
+    .metric-delta{
+      font-size:10px;
+      font-family:var(--font-mono);
+      margin-top:2px
+    }
+
+    .delta-pos{color:var(--accent2)}
+    .delta-neg{color:#b04040}
+    .delta-neu{color:var(--ink3)}
+
+    .indicator-card--clickable{
+      transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+    }
+
+    .indicator-card--clickable:hover{
+      transform:translateY(-1px);
+      border-color:var(--accent);
+      box-shadow:0 1px 6px rgba(0,0,0,0.06);
+    }
+
+    /* ── Result provenance badges ───────────────────────── */
+.result-badge{
+  display:inline-block;
+  margin-top:6px;
+  padding:2px 7px;
+  border-radius:999px;
+  font-size:9px;
+  font-family:var(--font-mono);
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  line-height:1.2;
+}
+
+.badge-direct{
+  background:#e8f5e9;
+  color:#1f6b28;
+  border:1px solid rgba(31,107,40,0.12);
+}
+
+.badge-derived{
+  background:#eef4ff;
+  color:#2957a4;
+  border:1px solid rgba(41,87,164,0.12);
+}
+
+.badge-estimated{
+  background:#fff4e5;
+  color:#9b6500;
+  border:1px solid rgba(155,101,0,0.12);
+}
+
+.badge-none{
+  background:#f3f3f3;
+  color:#777;
+  border:1px solid rgba(0,0,0,0.06);
+}
+
+/* ── Detailed result blocks ─────────────────────────── */
+.detail-box{
+  background:var(--paper2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:10px 12px;
+  margin-top:10px;
+}
+
+.detail-box p{
+  font-size:11px;
+  color:var(--ink2);
+  line-height:1.55;
+  margin:4px 0;
+}
+
+.calc-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px;
+  font-family:var(--font-mono);
+  margin-top:6px;
+}
+
+.calc-table th,
+.calc-table td{
+  border-bottom:1px solid rgba(0,0,0,0.06);
+  padding:6px 4px;
+  vertical-align:top;
+  text-align:left;
+}
+
+.calc-table th{
+  color:var(--ink3);
+  font-weight:500;
+}
+
+.calc-note{
+  font-size:10px;
+  color:var(--ink3);
+  font-family:var(--font-mono);
+  line-height:1.5;
+  margin-top:8px;
+}
+
+.formula{
+  font-family:var(--font-mono);
+  font-size:10px;
+  color:var(--ink3);
+  line-height:1.45;
+}
+
+.indicator-card--clickable{
+  transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+
+.indicator-card--clickable:hover{
+  transform:translateY(-1px);
+  border-color:var(--accent);
+  box-shadow:0 1px 6px rgba(0,0,0,0.06);
+}
+
+.metric-detail{
+  margin-top:4px;
+  font-size:10px;
+  font-family:var(--font-mono);
+  color:var(--ink3);
+  line-height:1.35;
+}
+
+<!-- ─── Carbon / Wood sidebar summary ─── -->
+<div id="carbonSidebarSection" class="section-label" style="display:none;margin-top:12px">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+    <span style="font-size:14px">🌿</span>
+    <strong>Carbon · Wood · GHG (GFW)</strong>
+  </div>
+  <div id="carbonSidebarContent">
+    <!-- filled by renderCarbonSidebar() -->
+  </div>
+</div>
+
+    /* ── Policy scenarios ───────────────────────────── */
+    .policy-scenario{
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      overflow:hidden
+    }
+    .policy-header{
+      padding:9px 12px;
+      background:var(--paper2);
+      font-size:12px;
+      font-weight:500;
+      display:flex;
+      align-items:center;
+      gap:8px
+    }
+    .policy-body{
+      padding:11px 12px;
+      display:flex;
+      flex-direction:column;
+      gap:8px
+    }
+    .policy-desc{font-size:11.5px;color:var(--ink2);line-height:1.6}
+    .filter-row{display:flex;align-items:center;gap:8px}
+    .filter-row label{
+      font-family:var(--font-mono);
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:0.06em;
+      color:var(--ink3);
+      white-space:nowrap
+    }
+    .filter-row select{
+      flex:1;
+      padding:5px 8px;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      font-size:12px;
+      background:var(--paper);
+      color:var(--ink);
+      cursor:pointer
+    }
+    .filter-row select:focus{outline:none;border-color:var(--accent)}
+
+    /* ── Buttons / misc ─────────────────────────────── */
+    .hint{
+      font-size:12px;
+      color:var(--ink3);
+      font-style:italic;
+      font-family:var(--font-serif);
+      line-height:1.6;
+      padding:4px 0
+    }
+
+    .ghost-btn{
+      font-family:var(--font-mono);
+      font-size:11px;
+      letter-spacing:0.04em;
+      text-transform:uppercase;
+      background:none;
+      border:1px solid var(--border);
+      color:var(--ink3);
+      padding:6px 14px;
+      border-radius:var(--radius);
+      cursor:pointer
+    }
+    .ghost-btn:hover{color:var(--ink);border-color:var(--ink2)}
+
+    .primary-btn{
+      font-family:var(--font-ui);
+      font-size:12px;
+      font-weight:500;
+      background:var(--accent);
+      color:#fff;
+      border:none;
+      padding:8px 14px;
+      border-radius:var(--radius);
+      cursor:pointer;
+      width:100%
+    }
+    .primary-btn:hover{background:var(--accent2)}
+
+    .danger-btn{
+      font-family:var(--font-ui);
+      font-size:12px;
+      background:none;
+      border:1px solid rgba(176,64,64,0.35);
+      color:#b04040;
+      padding:8px 14px;
+      border-radius:var(--radius);
+      cursor:pointer
+    }
+    .danger-btn:hover{background:rgba(176,64,64,0.06)}
+
+    .btn-row{display:flex;gap:8px}
+    .btn-row .primary-btn{flex:2}
+    .btn-row .danger-btn{flex:1}
+
+    /* ── Custom conversion planner ──────────────────── */
+    .custom-block{
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:14px
+    }
+    .custom-form{display:flex;flex-direction:column;gap:9px;margin:10px 0 12px}
+    .custom-row{display:flex;align-items:center;gap:8px}
+    .custom-row label{width:100px;font-size:12px;color:var(--ink2)}
+    .custom-row select,
+    .custom-row input[type="number"]{
+      flex:1;
+      padding:5px 8px;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      font-size:12px;
+      background:var(--paper);
+      color:var(--ink)
+    }
+    .custom-row select:focus,
+    .custom-row input:focus{outline:none;border-color:var(--accent)}
+
+    #conversionList{font-size:12px;margin:8px 0}
+    .conv-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:6px 8px;
+      background:var(--paper2);
+      border-radius:var(--radius);
+      margin-bottom:4px;
+      gap:8px
+    }
+    .conv-item button{
+      font-size:10px;
+      padding:2px 7px;
+      border:1px solid rgba(176,64,64,0.35);
+      background:none;
+      color:#b04040;
+      border-radius:3px;
+      cursor:pointer
+    }
+    .conv-item button:hover{background:rgba(176,64,64,0.06)}
+
+    /* ── Interactions ───────────────────────────────── */
+    .lu-note{
+      border-left:3px solid var(--accent);
+      padding:10px 12px;
+      margin-bottom:10px;
+      background:var(--paper2);
+      border-radius:0 var(--radius) var(--radius) 0
+    }
+    .lu-note-title{font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink)}
+    .lu-note p{font-size:11.5px;line-height:1.55;color:var(--ink2);margin:3px 0}
+    .lu-note ul{margin:4px 0 6px 16px;font-size:11.5px;color:var(--ink2);line-height:1.5}
+    .lu-note li{margin-bottom:2px}
+    .tag{
+      display:inline-block;
+      font-size:9px;
+      font-family:var(--font-mono);
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      padding:2px 7px;
+      border-radius:2px;
+      margin:2px 4px 4px 0
+    }
+    .tag-syn{background:#e8f5e9;color:#2d7a3a}
+    .tag-trade{background:#fdecea;color:#b04040}
+    .tag-fn{background:#eceae3;color:#4a4a45}
+
+    /* ── Upload dropzone ────────────────────────────── */
+    #dropzone{
+      border:1px dashed var(--paper3);
+      border-radius:var(--radius);
+      padding:22px 16px;
+      text-align:center;
+      cursor:pointer;
+      color:var(--ink3);
+      font-size:12px;
+      line-height:1.6
+    }
+    #dropzone:hover,#dropzone.drag{
+      border-color:var(--accent);
+      background:rgba(45,90,39,0.04);
+      color:var(--accent)
+    }
+    .dz-icon{font-size:24px;margin-bottom:6px;display:block}
+    #fileInput{display:none}
+
+    /* ── Leaflet controls ───────────────────────────── */
+    .leaflet-control-attribution{font-size:9px !important}
+    .map-search-control{
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:4px;
+      width:220px
+    }
+    .map-search-top{display:flex;gap:4px;margin-bottom:4px}
+    .map-search-topbtn{
+      flex:1;
+      padding:4px 6px;
+      font-family:var(--font-mono);
+      font-size:10px;
+      text-transform:uppercase;
+      background:var(--paper);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      cursor:pointer;
+      color:var(--ink3)
+    }
+    .map-search-topbtn:hover{color:var(--ink);border-color:var(--ink2)}
+    .map-search-input{
+      width:100%;
+      padding:6px 8px;
+      font-size:12px;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:var(--paper);
+      color:var(--ink)
+    }
+    .map-search-input:focus{outline:none;border-color:var(--accent)}
+    .map-search-hint{
+      font-family:var(--font-mono);
+      font-size:9.5px;
+      color:var(--ink3);
+      margin-top:4px
+    }
+
+    @media (max-width: 1100px){
+      #app{
+        grid-template-columns:1fr;
+        grid-template-rows:48px 1fr 480px
+      }
+      #sidebar{border-top:1px solid var(--border)}
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ HEADER ══════════════════════════════════════════ -->
+  <header id="header">
+    <div class="dot"></div>
+    <h1>Multifunctional Landscape Planner</h1>
+    <span class="coord" id="coordDisplay">Move cursor over map</span>
+    <span class="area-badge" id="totalAreaBadge">0 ha drawn</span>
+  </header>
+
+  <!-- ══ MAP ═════════════════════════════════════════════ -->
+  <div id="map"></div>
+
+  <!-- ══ SIDEBAR ═════════════════════════════════════════ -->
+  <aside id="sidebar">
+
+    <div id="tabs">
+      <button class="tab active" data-tab="composition">Composition</button>
+      <button class="tab" data-tab="policy">Scenarios</button>
+      <button class="tab" data-tab="custom">Custom</button>
+      <button class="tab" data-tab="interactions">Interactions</button>
+      <button class="tab" data-tab="upload">Upload</button>
+      <button class="tab" data-tab="crops">Crops</button>
+      <button class="tab" data-tab="wood">Wood</button>
+      <button class="tab" data-tab="carbon">Carbon</button>
+      <button class="tab" data-tab="hydro">Hydro</button>
+      <button class="tab" data-tab="ghg">GHG</button>
+      <button class="tab" data-tab="about">About</button>
+    </div>
+
+    <!-- ══ COMPOSITION ════════════════════════════════════ -->
+    <div class="panel active" id="panel-composition">
+
+      <div class="source-selector-block">
+        <div class="section-label">Classification source</div>
+
+        <div class="src-btn-row">
+          <button class="src-btn src-btn--active" data-rs-source="osm">
+            <span class="src-btn__icon">◉</span>OSM
+          </button>
+          <button class="src-btn" data-rs-source="esri">
+            <span class="src-btn__icon">⬡</span>ESRI
+          </button>
+        </div>
+
+        <div id="apiStatus" class="api-status api-status--info"></div>
+      </div>
+
+      <div>
+        <div class="section-label">Land cover composition</div>
+        <div id="compositionBars">
+          <p class="hint">Draw a polygon on the map, or click anywhere to sample a 1 km radius.</p>
+        </div>
+      </div>
+
+      <div id="radarSection" style="display:none">
+        <div class="section-label">Ecosystem service profile (0–5)</div>
+        <div id="radarWrap"><canvas id="radar"></canvas></div>
+      </div>
+
+      <div id="indicatorSection" style="display:none;">
+        <div class="section-label">Key indicators (per landscape)</div>
+        <div id="indicatorGrid" class="metrics-grid-3"></div>
+      </div>
+
+      <div id="areaStatWrap" style="display:none">
+        <div class="area-stat" id="areaStat"></div>
+      </div>
+
+      <button class="ghost-btn" id="clearBtn" style="display:none;align-self:flex-start" onclick="clearAll()">✕ Clear all</button>
+      <button class="ghost-btn" id="clearSelectedBtn" style="display:none;align-self:flex-start" onclick="clearSelectedPolygon()">✕ Clear selected polygon</button>
+    </div>
+    <div class="panel" id="panel-hydro">
+  <div id="panel-hydro-content"></div>
+</div>
+
+    <!-- ══ SCENARIOS ══════════════════════════════════════ -->
+    <div class="panel" id="panel-policy">
+      <p class="hint" id="policyHint">Draw an area first to run policy scenarios.</p>
+      <div id="scenarioControls" style="display:none">
+        <div class="filter-row">
+          <label>Filter</label>
+          <select id="scenarioFamilySelect"></select>
+        </div>
+      </div>
+      <div id="policyContent" style="display:none;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <!-- ══ CUSTOM ═════════════════════════════════════════ -->
+    <div class="panel" id="panel-custom">
+      <div class="custom-block">
+        <div class="section-label">Custom conversion planner</div>
+        <p class="hint" style="margin-bottom:4px">
+          Add one or more land-use conversions to project outcomes for the current landscape.
+        </p>
+
+        <div class="custom-form">
+          <div class="custom-row">
+            <label>From</label>
+            <select id="convFrom"></select>
+          </div>
+          <div class="custom-row">
+            <label>To</label>
+            <select id="convTo"></select>
+          </div>
+          <div class="custom-row">
+            <label>% of source</label>
+            <input type="number" id="convPercent" value="20" min="1" max="100" step="1"/>
+          </div>
+          <button class="primary-btn" id="addConversionBtn">＋ Add conversion</button>
+        </div>
+
+        <div id="conversionList"><p class="hint">No conversions added yet.</p></div>
+
+        <div class="btn-row" style="margin-top:8px">
+          <button class="primary-btn" id="runCustomBtn">▶ Calculate outcomes</button>
+          <button class="danger-btn" id="clearConversionsBtn">✕ Clear</button>
+        </div>
+      </div>
+
+      <div id="customScenarioResults"></div>
+    </div>
+
+    <!-- ══ INTERACTIONS ═══════════════════════════════════ -->
+    <div class="panel" id="panel-interactions">
+      <p class="hint" id="interactionsHint">
+        Draw or upload an area to see synergies and trade-offs for each land-use type present,
+        based on the Integrated Benefits Framework.
+      </p>
+      <div id="luNotesContainer"></div>
+    </div>
+
+    <!-- ══ UPLOAD ═════════════════════════════════════════ -->
+    <div class="panel" id="panel-upload">
+      <div>
+        <div class="section-label">Import shapefile (.zip)</div>
+        <div id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <span class="dz-icon">⬆</span>
+          Drop a <strong>.zip</strong> shapefile here<br/>or click to browse
+        </div>
+        <input type="file" id="fileInput" accept=".zip"/>
+      </div>
+
+      <div class="hint" style="margin-top:4px;font-size:11px">
+        Features with <code>esa_code</code>, <code>worldcover</code>, <code>gee_class</code>,
+        <code>landuse</code>, or other recognised property fields are classified directly;
+        others are classified using the selected remote-sensing source (OSM / ESRI / ESA).
+      </div>
+
+      <div id="uploadStatus"></div>
+    </div>
+
+    <!-- ══ CROPS ══════════════════════════════════════════ -->
+    <div class="panel" id="panel-crops">
+      <div class="section-label">Crop production (SPAM)</div>
+      <div id="cropAnalysisContent">
+        <p class="hint">Draw a polygon over cropland to see estimated yields from SPAM.</p>
+      </div>
+    </div>
+
+    <!-- ══ WOOD ═══════════════════════════════════════════ -->
+    <div class="panel" id="panel-wood">
+      <div class="section-label">Wood production</div>
+      <div id="panel-wood-content">
+        <p class="hint">Draw a polygon to fetch wood production from the backend.</p>
+      </div>
+    </div>
+
+    <!-- ══ CARBON ═════════════════════════════════════════ -->
+    <div class="panel" id="panel-carbon">
+      <div class="section-label">Carbon (stocks &amp; proxy sequestration)</div>
+      <div id="panel-carbon-content">
+        <p class="hint">
+          Draw a polygon (or click the map) to fetch biomass stocks and a proxy
+          sequestration estimate from the backend.
+        </p>
+      </div>
+      <div style="font-size:10px;color:var(--ink3);font-family:var(--font-mono);margin-top:6px">
+        Interpretation note: “Carbon sequestration” (net annual uptake) usually requires
+        a growth model or time-series biomass change plus inventory assumptions.
+      </div>
+    </div>
+
+    <!-- ══ GHG ════════════════════════════════════════════ -->
+    <div class="panel" id="panel-ghg">
+      <div class="section-label">GHG emissions (from loss)</div>
+      <div id="panel-ghg-content">
+        <p class="hint">
+          Emissions values are typically derived from tree cover loss and represent
+          gross emissions, not net sequestration.
+        </p>
+      </div>
+    </div>
+
+    <!-- ══ ABOUT ══════════════════════════════════════════ -->
+    <div class="panel" id="panel-about">
+      <div id="frameworkContent"></div>
+    </div>
+
+  </aside>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
