@@ -160,7 +160,7 @@ async function fetchOverpassJSON(query){
     try{
       const res = await fetch(url, {
         method:'POST',
-        headers:{ 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
+        headers:{ 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'User-Agent':'LandscapePlanner/1.0' },
         body:'data=' + encodeURIComponent(query),
         signal: AbortSignal.timeout(300000)
       });
@@ -2127,18 +2127,20 @@ function renderHydroPanel(){
   const risks = h.risks || {};
   const rip = h.riparian || {};
   const wb = h.waterBalance || {};
+  const ds = h.dataSources || {};
 
   el.innerHTML = `
     <div class="metrics-grid-3">
       <div class="metric-card">
         <div class="metric-label">Rivers / streams</div>
         <div class="metric-value">${wf.riverCount || 0}</div>
-        <div class="metric-unit">features</div>
+        <div class="metric-unit">${ds.rivers || 'features'}</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Lakes / ponds</div>
+        <div class="metric-label">Lakes / ponds/ reservoirs</div>
         <div class="metric-value">${wf.lakeCount || 0}</div>
         <div class="metric-unit">features</div>
+        <div class="metric-unit">${wf.totalLakeArea_km2 ? fmt(wf.totalLakeArea_km2) + ' km²' : 'features'}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Wetlands</div>
@@ -2151,9 +2153,9 @@ function renderHydroPanel(){
         <div class="metric-unit">km/km²</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Dominant type</div>
-        <div class="metric-value" style="font-size:13px">${wf.dominantWaterwayType || '—'}</div>
-        <div class="metric-unit">waterway</div>
+        <div class="metric-label">Dominant type/ Max Strahler order</div>
+        <div class="metric-value" style="font-size:13px">${wf.dominantWaterwayType/ wf.maxStrahlerOrder || '—'}</div>
+        <div class="metric-unit">waterway/ stream order</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Flood risk</div>
@@ -2220,6 +2222,117 @@ function renderHydroPanel(){
     <div class="calc-note" style="margin-top:8px">
       Water features from OpenStreetMap. Hydrology estimated from latitude-based climate model.
       ${h.note || ''}
+    </div>
+      ${wf.totalRiverLength_km ? `
+    <div class="metrics-grid-3" style="margin-top:8px">
+      <div class="metric-card">
+        <div class="metric-label">Total river length</div>
+        <div class="metric-value">${fmt(wf.totalRiverLength_km)}</div>
+        <div class="metric-unit">km</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Max catchment</div>
+        <div class="metric-value">${fmt(wf.maxCatchmentArea_km2)}</div>
+        <div class="metric-unit">km²</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Lake volume</div>
+        <div class="metric-value">${fmt(wf.totalLakeVolume_mcm)}</div>
+        <div class="metric-unit">million m³</div>
+      </div>
+    </div>` : ''}
+
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Water Balance</div>
+      <table class="calc-table">
+        <tr><th>Component</th><th>Value</th><th>Unit</th></tr>
+        <tr><td>Precipitation</td><td>${fmt(hy.precipitation_mm_yr)}</td><td>mm/yr</td></tr>
+        <tr><td>Annual runoff</td><td>${fmt(hy.annualRunoff_mm_yr)}</td><td>mm/yr</td></tr>
+        <tr><td>Water yield</td><td>${fmt(hy.annualWaterYield_m3_yr)}</td><td>m³/yr</td></tr>
+        <tr><td>Baseflow</td><td>${fmt(hy.annualBaseflow_m3_yr)}</td><td>m³/yr</td></tr>
+        <tr><td>Baseflow index</td><td>${fmt(hy.baseflowIndex)}</td><td>—</td></tr>
+        <tr><td>Runoff coefficient</td><td>${fmt(hy.runoffCoefficient)}</td><td>—</td></tr>
+      </table>
+    </div>
+
+    ${wf.rivers && wf.rivers.length > 0 ? `
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Rivers & Streams (${ds.rivers || ''})</div>
+      <table class="calc-table">
+        <tr><th>Name</th><th>Order</th><th>Length</th><th>Catchment</th></tr>
+        ${wf.rivers.slice(0, 15).map(r => `
+          <tr>
+            <td>${r.name || 'Unnamed'}</td>
+            <td>${r.strahlerOrder || r.type || '—'}</td>
+            <td>${r.length_km ? fmt(r.length_km) + ' km' : '—'}</td>
+            <td>${r.catchmentArea_km2 ? fmt(r.catchmentArea_km2) + ' km²' : '—'}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>` : ''}
+
+    ${wf.lakes && wf.lakes.length > 0 ? `
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Lakes & Reservoirs</div>
+      <table class="calc-table">
+        <tr><th>Name</th><th>Type</th><th>Area</th><th>Volume</th><th>Depth</th></tr>
+        ${wf.lakes.slice(0, 10).map(l => `
+          <tr>
+            <td>${l.name || 'Unnamed'}</td>
+            <td>${l.type || '—'}</td>
+            <td>${l.area_km2 ? fmt(l.area_km2) + ' km²' : '—'}</td>
+            <td>${l.volume_mcm ? fmt(l.volume_mcm) + ' Mm³' : '—'}</td>
+            <td>${l.avgDepth_m ? fmt(l.avgDepth_m) + ' m' : '—'}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>` : ''}
+
+    ${(h.waterFeatures?.basins || []).length > 0 ? `
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Watershed Basins (HydroBASINS)</div>
+      <table class="calc-table">
+        <tr><th>Basin ID</th><th>Sub-area</th><th>Upstream area</th><th>Endorheic</th></tr>
+        ${h.waterFeatures.basins.map(b => `
+          <tr>
+            <td>${b.basinId || '—'}</td>
+            <td>${b.subArea_km2 ? fmt(b.subArea_km2) + ' km²' : '—'}</td>
+            <td>${b.upstreamArea_km2 ? fmt(b.upstreamArea_km2) + ' km²' : '—'}</td>
+            <td>${b.endorheic ? 'Yes' : 'No'}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>` : ''}
+
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Riparian Assessment</div>
+      <div style="font-size:12px;line-height:1.6;font-family:var(--font-mono)">
+        <div>Buffer length: ${fmt(rip.estimatedRiparianBuffer_km)} km</div>
+        <div>Buffer area: ${fmt(rip.estimatedRiparianArea_ha)} ha</div>
+        <div style="margin-top:6px">${rip.recommendation || ''}</div>
+      </div>
+    </div>
+
+    <div class="detail-box" style="margin-top:12px">
+      <div class="section-label">Risk Assessment</div>
+      <div class="metrics-grid-3">
+        <div class="metric-card">
+          <div class="metric-label">Flood risk</div>
+          <div class="metric-value" style="font-size:13px">${risks.floodRisk || '—'}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Water quality risk</div>
+          <div class="metric-value" style="font-size:13px">${risks.waterQualityRisk || '—'}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Erosion risk</div>
+          <div class="metric-value" style="font-size:13px">${risks.erosionRisk || '—'}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="calc-note" style="margin-top:8px">
+      ${h.note || 'Water features from HydroSHEDS. Hydrology from latitude-based climate model.'}
     </div>
   `;
 }
