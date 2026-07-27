@@ -998,28 +998,28 @@ async function fetchBackendData(geometry) {
     return { spam: null, carbon: null, wood: null, hydro: null };
 
   const [spamRes, carbonRes, woodRes, hydroRes] = await Promise.allSettled([
-    fetch('http://localhost:3000/api/yield/analyze', {
+    fetch('https://landscape-backend-ob7d.onrender.com/api/yield/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
       signal: AbortSignal.timeout(15000)
     }),
 
-    fetch('http://localhost:3000/api/carbon/analyze', {
+    fetch('https://landscape-backend-ob7d.onrender.com/api/carbon/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
       signal: AbortSignal.timeout(180000)
     }),
 
-    fetch('http://localhost:3000/api/wood/analyze', {
+    fetch('https://landscape-backend-ob7d.onrender.com/api/wood/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
       signal: AbortSignal.timeout(180000)
     }),
 
-    fetch('http://localhost:3000/api/hydro/analyze', {
+    fetch('https://landscape-backend-ob7d.onrender.com/api/hydro/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
