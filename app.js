@@ -162,7 +162,7 @@ async function fetchOverpassJSON(query){
         method:'POST',
         headers:{ 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
         body:'data=' + encodeURIComponent(query),
-        signal: AbortSignal.timeout(180000)
+        signal: AbortSignal.timeout(300000)
       });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       return await res.json();
@@ -1002,28 +1002,28 @@ async function fetchBackendData(geometry) {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(300000)
     }),
 
     fetch('https://landscape-backend-ob7d.onrender.com/api/carbon/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
-      signal: AbortSignal.timeout(180000)
+      signal: AbortSignal.timeout(300000)
     }),
 
     fetch('https://landscape-backend-ob7d.onrender.com/api/wood/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
-      signal: AbortSignal.timeout(180000)
+      signal: AbortSignal.timeout(300000)
     }),
 
     fetch('https://landscape-backend-ob7d.onrender.com/api/hydro/analyze', {
       method: 'POST',
       headers: { 'Content-Type':'application/json' },
       body: JSON.stringify({ geometry: feature }),
-      signal: AbortSignal.timeout(180000)
+      signal: AbortSignal.timeout(300000)
     })
   ]);
 
