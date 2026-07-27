@@ -387,7 +387,7 @@ async function classifyPointESRI(lon, lat){
       method: 'POST',
       headers:{ 'Content-Type':'application/x-www-form-urlencoded' },
       body: body.toString(),
-      signal: AbortSignal.timeout(8000)
+      signal: AbortSignal.timeout(30000)
     });
     if (!res.ok) throw new Error(`ESRI HTTP ${res.status}`);
     const data = await res.json();
@@ -434,7 +434,7 @@ async function classifyPointESA(lon, lat){
 
   try {
     const res = await fetch(`${RS_SOURCES.esa.url}?${params}`, {
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(30000)
     });
     if (!res.ok) return 'unknown';
     const text = await res.text();
